@@ -25,6 +25,9 @@ import java.util.Random;
 import java.util.Map;
 import java.util.LinkedHashMap;
 import java.nio.charset.Charset;
+import org.json.JSONObject;
+import org.json.JSONArray;
+import org.json.JSONException;
 
 class WebServer {
   public static void main(String args[]) {
@@ -175,7 +178,41 @@ class WebServer {
           builder.append("\n");
           builder.append(new String(readFileInBytes(file)));
 
-        } else if (request.contains("file/")) {
+        } else if (request.contains("sum?")) {
+          Map<String, String> query_pairs = new LinkedHashMap<String, String>();
+          query_pairs = splitQuery(request.replace("sum?", ""));
+
+          String num1Str = query_pairs.get("num1");
+          String num2Str = query_pairs.get("num2");
+
+          if (num1Str == null || num2Str == null || !num1Str.matches("\\d+") || !num2Str.matches("\\d+")) {
+            builder.append("HTTP/1.1 400 Bad Request\n");
+            builder.append("Content-Type: text/html; charset=utf-8\n");
+            builder.append("\n");
+            builder.append("Invalid input. Please provide two numbers.");
+          } else {
+            Integer num1 = Integer.parseInt(num1Str);
+            Integer num2 = Integer.parseInt(num2Str);
+
+            Integer sum = num1 + num2;
+
+            builder.append("HTTP/1.1 200 OK\n");
+            builder.append("Content-Type: text/html; charset=utf-2\n");
+            builder.append("\n");
+            builder.append("Sum is: " + sum);
+          }
+      } else if (request.contains("fetch?")) {
+        Map<String, String> query_pairs = new LinkedHashMap<String, String>();
+        query_pairs = splitQuery(request.replace("fetch?", ""));
+
+        String endpoint = query_pairs.get("endpoint");
+
+        String data = fetchDataFromMockAPI(endpoint);
+        builder.append("HTTP/1.1 200 OK\n");
+        builder.append("Content-Type: text/html; charset=utf-8\n");
+        builder.append("\n");
+        builder.append(data);
+      } else if (request.contains("file/")) {
           // tries to find the specified file and shows it or shows an error
 
           // take the path and clean it. try to open the file
@@ -193,6 +230,7 @@ class WebServer {
             builder.append("\n");
             builder.append("File not found: " + file);
           }
+
         } else if (request.contains("multiply?")) {
           // This multiplies two numbers, there is NO error handling, so when
           // wrong data is given this just crashes
@@ -201,31 +239,28 @@ class WebServer {
           // extract path parameters
           query_pairs = splitQuery(request.replace("multiply?", ""));
 
-          // extract required fields from parameters
-          Integer num1 = Integer.parseInt(query_pairs.get("num1"));
-          Integer num2 = Integer.parseInt(query_pairs.get("num2"));
+          String num1Str = query_pairs.get("num1");
+          String num2Str = query_pairs.get("num2");
 
-          // do math
-          Integer result = num1 * num2;
+          if (num1Str == null || num2Str == null || !num1Str.matches("\\d+") || !num2Str.matches("\\d+")) {
+            builder.append("HTTP/1.1 400 Bad Request\n");
+            builder.append("Content-Type: text/html; charset=utf-8\n");
+            builder.append("\n");
+            builder.append("Invalid input. Please provide two numbers.");
+          } else {
+            Integer num1 = Integer.parseInt(num1Str);
+            Integer num2 = Integer.parseInt(num2Str);
 
-          // Generate response
-          builder.append("HTTP/1.1 200 OK\n");
-          builder.append("Content-Type: text/html; charset=utf-8\n");
-          builder.append("\n");
-          builder.append("Result is: " + result);
+            // do math
+            Integer result = num1 * num2;
 
-          // TODO: Include error handling here with a correct error code and
-          // a response that makes sense
-
+            // Generate response
+            builder.append("HTTP/1.1 200 OK\n");
+            builder.append("Content-Type: text/html; charset=utf-8\n");
+            builder.append("\n");
+            builder.append("Result is: " + result);
+          }
         } else if (request.contains("github?")) {
-          // pulls the query from the request and runs it with GitHub's REST API
-          // check out https://docs.github.com/rest/reference/
-          //
-          // HINT: REST is organized by nesting topics. Figure out the biggest one first,
-          //     then drill down to what you care about
-          // "Owner's repo is named RepoName. Example: find RepoName's contributors" translates to
-          //     "/repos/OWNERNAME/REPONAME/contributors"
-
           Map<String, String> query_pairs = new LinkedHashMap<String, String>();
           query_pairs = splitQuery(request.replace("github?", ""));
           String json = fetchURL("https://api.github.com/" + query_pairs.get("query"));
@@ -235,10 +270,23 @@ class WebServer {
           builder.append("Content-Type: text/html; charset=utf-8\n");
           builder.append("\n");
           builder.append("Check the todos mentioned in the Java source file");
-          // TODO: Parse the JSON returned by your fetch and create an appropriate
-          // response based on what the assignment document asks for
 
-        } else {
+          try {
+            JSONObject obj = new JSONObject(json);
+            JSONArray repos = obj.getJSONArray("items");
+            for (int i = 0; i < repos.length(); i++) {
+              JSONObject repo = repos.getJSONObject(i);
+              String fullName = repo.getString("full_name");
+              int id = repo.getInt("id");
+              String ownerLogin = repo.getJSONObject("owner").getString("login");
+              builder.append(fullName + "<br>" + id + "<br>" + ownerLogin + "<br>");
+            }
+          } catch (JSONException e) {
+            builder.append("Error parsing JSON response");
+            e.printStackTrace();
+          }
+        }
+        else {
           // if the request is not recognized at all
 
           builder.append("HTTP/1.1 400 Bad Request\n");
@@ -257,6 +305,7 @@ class WebServer {
 
     return response;
   }
+
 
   /**
    * Method to read in a query and split it up correctly
@@ -362,4 +411,20 @@ class WebServer {
     }
     return sb.toString();
   }
+
+private String fetchDataFromMockAPI(String endpoint) {
+    // Simulate fetching data from a mock API
+    if (endpoint.equals("users")) {
+        return "{\"items\": [{" +
+                "\"full_name\": \"Kiran Shrestha\"," +
+                "\"id\": 123," +
+                "\"owner\": {" +
+                "\"login\": \"kshrest9\"" +
+                "}" +
+                "}]}";
+    }
+    return "No data found";
+}
+  
+
 }
